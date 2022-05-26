@@ -45,9 +45,9 @@ export const update = (fiber?: IFiber) => {
   }
 }
 
-const reconcile = (WIP?: IFiber): boolean => {
+const reconcile = (WIP?: IFiber): boolean => { // diff
   while (WIP && !shouldYield()) WIP = capture(WIP)
-  if (WIP) return reconcile.bind(null, WIP)
+  if (WIP) return reconcile.bind(null, WIP) // 等待 cpu 空闲时执行
   if (finish) {
     commit(finish)
     finish = null
@@ -56,28 +56,31 @@ const reconcile = (WIP?: IFiber): boolean => {
 }
 
 const capture = (WIP: IFiber): IFiber | undefined => {
+  console.log('WIP', WIP);
+  // fiber 使用链表遍历, 遍历完子节点以后需要回过头来遍历兄弟节点
   WIP.isComp = isFn(WIP.type)
   WIP.isComp ? updateHook(WIP) : updateHost(WIP)
-  if (WIP.child) return WIP.child
-  while (WIP) {
-    bubble(WIP)
-    if (!finish && WIP.lane & LANE.DIRTY) {
+  if (WIP.child) return WIP.child // 向下捕获, 先遍历子元素，然后兄弟元素，然后向上冒泡
+  while (WIP) { // 子元素遍历完了
+    bubble(WIP) // 冒泡
+    if (!finish && WIP.lane & LANE.DIRTY) { // fiber 树遍历完就 finish 了, 然后就需要执行 commit
       finish = WIP
       WIP.lane &= ~LANE.DIRTY
       return null
     }
     if (WIP.sibling) return WIP.sibling
-    WIP = WIP.parent
+    WIP = WIP.parent // 这里没有 return, 也就是没有兄弟节点后返回父节点，遍历父节点的兄弟节点
   }
 }
 
-const bubble = WIP => {
+const bubble = WIP => { // 冒泡是为了构建副作用树
+  console.log('bubble', effect, WIP);
   if (WIP.isComp) {
-    if (WIP.hooks) {
-      side(WIP.hooks.layout)
-      schedule(() => side(WIP.hooks.effect))
+    if (WIP.hooks) { // 副作用
+      side(WIP.hooks.layout) // Side-effects, 对于class component来说，要更新其refs,调用componentDidMount，componentDidUpdate等生命周期。
+      schedule(() => side(WIP.hooks.effect)) // useEffect 在 React 的渲染过程中是被异步调用的，用于绝大多数场景；而 useLayoutEffect 会在所有的 DOM 变更之后同步调用，主要用于处理 DOM 操作、调整样式、避免页面闪烁等问题。也正因为是同步处理，所以需要避免在 useLayoutEffect 做计算量较大的耗时任务从而造成阻塞。
     }
-  } else {
+  } else { // 对于host components来说，可以有增加，删除，更新。
     effect.e = WIP
     effect = WIP
   }
@@ -124,12 +127,12 @@ const diffKids = (WIP: any, children: FreNode): void => {
 
   while (aHead <= aTail && bHead <= bTail) {
     if (!same(aCh[aHead], bCh[bHead])) break
-    clone(aCh[aHead++], bCh[bHead++], LANE.UPDATE)
+    clone(aCh[aHead++], bCh[bHead++], LANE.UPDATE) // same node 更新
   }
 
   while (aHead <= aTail && bHead <= bTail) {
     if (!same(aCh[aTail], bCh[bTail])) break
-    clone(aCh[aTail--], bCh[bTail--], LANE.UPDATE)
+    clone(aCh[aTail--], bCh[bTail--], LANE.UPDATE) // same node 更新
   }
 
   // LCS
@@ -215,10 +218,10 @@ export const arrayfy = arr => (!arr ? [] : isArr(arr) ? arr : [arr])
 const side = (effects: IEffect[]): void => {
   effects.forEach(e => e[2] && e[2]())
   effects.forEach(e => (e[2] = e[0]()))
-  effects.length = 0
+  effects.length = 0 // 删除副作用列表
 }
 
-function lcs(
+function lcs( // 最长公共子序列
   bArr,
   aArr,
   bHead = 0,
@@ -226,19 +229,21 @@ function lcs(
   aHead = 0,
   aTail = aArr.length - 1
 ) {
-  let keymap = {},
-    unkeyed = [],
+  // https://zhuanlan.zhihu.com/p/266230365
+  let keymap = {}, // old key map { key: index }
+    unkeyed = [], // old unkeyed index
     idxUnkeyed = 0,
-    ch,
+    ch, // new child
     item,
     k,
     idxInOld,
     key
 
+  // a old, b new
   let newLen = bArr.length
   let oldLen = aArr.length
   let minLen = Math.min(newLen, oldLen)
-  let tresh = Array(minLen + 1)
+  let tresh = Array(minLen + 1) // trash? 垃圾值？
   tresh[0] = -1
 
   for (var i = 1; i < tresh.length; i++) {
@@ -305,7 +310,7 @@ function lcs(
   }
 }
 
-function bs(ktr, j) {
+function bs(ktr, j) { // Binary Search 二分查找
   let lo = 1
   let hi = ktr.length - 1
   while (lo <= hi) {

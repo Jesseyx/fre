@@ -43,7 +43,7 @@ export interface IFiber<P extends Attributes = any> {
   key?: string
   type: string | FC<P>
   parentNode: HTMLElementEx
-  childNodes: any
+  childNodes: any // 子元素 HTMLElement，对应 props.children
   node: HTMLElementEx
   kids?: any
   parent?: IFiber<P>
@@ -57,7 +57,7 @@ export interface IFiber<P extends Attributes = any> {
   props: P
   lane: number
   time: number
-  e: IFiber
+  e: IFiber // effect?
   prev: IFiber
   d: IFiber
   laziness: any[]
